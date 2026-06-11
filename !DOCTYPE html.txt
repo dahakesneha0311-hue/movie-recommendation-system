@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Movie Recommendation System</title>
+
+<style>
+body {
+    font-family: Arial;
+    margin: 0;
+    background: #0f0f0f;
+    color: white;
+    text-align: center;
+}
+
+header {
+    padding: 20px;
+    font-size: 26px;
+    background: #1c1c1c;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 15px;
+}
+
+select, button {
+    padding: 10px;
+    border-radius: 6px;
+    border: none;
+}
+
+button {
+    background: red;
+    color: white;
+    cursor: pointer;
+}
+
+#movies {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    padding: 20px;
+}
+
+.card {
+    background: #222;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.card img {
+    width: 100%;
+    height: 260px;
+    object-fit: cover;
+}
+
+.card-content {
+    padding: 10px;
+}
+
+.popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.popup-box {
+    background: #222;
+    padding: 20px;
+    width: 420px;
+    border-radius: 10px;
+    text-align: left;
+}
+
+.popup-box button {
+    margin-top: 10px;
+    background: red;
+}
+
+/* pagination */
+.pagination {
+    margin: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<header>🎬 Movie Recommendation System</header>
+
+<div class="controls">
+
+<select id="genre">
+    <option value="28">Action</option>
+    <option value="53">Thriller</option>
+    <option value="10749">Romance</option>
+    <option value="27">Horror</option>
+    <option value="35">Comedy</option>
+</select>
+
+<select id="industry">
+    <option value="en">Hollywood</option>
+    <option value="hi">Bollywood</option>
+    <option value="ta">Tamil</option>
+    <option value="te">Telugu</option>
+</select>
+
+<select id="era">
+    <option value="1980">1980s</option>
+    <option value="1990">1990s</option>
+    <option value="2000">2000s</option>
+    <option value="2010">2010s</option>
+    <option value="2020">Latest</option>
+</select>
+
+<button onclick="getMovies(1)">Get Movies</button>
+
+</div>
+
+<div id="movies"></div>
+
+<script>
+
+const API_KEY = "84e534610af990b6a2cb7133aafd6136";
+
+let moviesData = [];
+let currentPage = 1;
+
+async function getMovies(page = 1) {
+
+    const genre = document.getElementById("genre").value;
+    const industry = document.getElementById("industry").value;
+    const era = document.getElementById("era").value;
+
+    let start, end;
+
+    if (era === "1980") {
+        start = "1980-01-01"; end = "1989-12-31";
+    } else if (era === "1990") {
+        start = "1990-01-01"; end = "1999-12-31";
+    } else if (era === "2000") {
+        start = "2000-01-01"; end = "2009-12-31";
+    } else if (era === "2010") {
+        start = "2010-01-01"; end = "2019-12-31";
+    } else {
+        start = "2020-01-01"; end = "2030-12-31";
+    }
+
+    const url =
+    `https://api.themoviedb.org/3/discover/movie?api_key=${API_KEY}` +
+    `&with_genres=${genre}` +
+    `&with_original_language=${industry}` +
+    `&primary_release_date.gte=${start}` +
+    `&primary_release_date.lte=${end}` +
+    `&sort_by=popularity.desc` +
+    `&page=${page}`;
+
+    document.getElementById("movies").innerHTML = "Loading...";
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    moviesData = data.results;
+    currentPage = page;
+
+    let output = "";
+
+    data.results.forEach((movie, index) => {
+
+        output += `
+        <div class="card" onclick="showMovie(${index})">
+            <img src="https://image.tmdb.org/t/p/w500${movie.poster_path}">
+            <div class="card-content">
+                <h3>${movie.title}</h3>
+                <p>⭐ ${movie.vote_average}</p>
+            </div>
+        </div>`;
+    });
+
+    document.getElementById("movies").innerHTML = output + pagination();
+}
+
+function showMovie(index) {
+
+    const movie = moviesData[index];
+
+    const popup = document.createElement("div");
+    popup.className = "popup";
+
+    popup.innerHTML = `
+        <div class="popup-box">
+            <h2>${movie.title}</h2>
+
+            <p><b>Rating:</b> ⭐ ${movie.vote_average}</p>
+
+            <p>${movie.overview}</p>
+
+            <p id="ott-${movie.id}">Loading OTT platforms...</p>
+
+            <button onclick="watchTrailer(${movie.id})">
+                ▶ Watch Trailer
+            </button>
+
+            <br><br>
+
+            <button onclick="this.parentElement.parentElement.remove()">
+                Close
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(popup);
+
+    getOTT(movie.id);
+}
+
+async function getOTT(movieId) {
+
+    try {
+
+        const response = await fetch(
+            `https://api.themoviedb.org/3/movie/${movieId}/watch/providers?api_key=${API_KEY}`
+        );
+
+        const data = await response.json();
+
+        const ottElement = document.getElementById(`ott-${movieId}`);
+
+        if (!ottElement) return;
+
+        const region =
+            data.results?.IN ||
+            data.results?.US ||
+            Object.values(data.results || {})[0];
+
+        if (region && region.flatrate) {
+
+            let providers = "<b>Available on:</b><br>";
+
+            region.flatrate.forEach(provider => {
+                providers += provider.provider_name + "<br>";
+            });
+
+            ottElement.innerHTML = providers;
+
+        } else {
+
+            ottElement.innerHTML = "OTT information not available";
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        document.getElementById(`ott-${movieId}`).innerHTML =
+            "Error loading OTT information";
+    }
+}
+
+async function watchTrailer(movieId) {
+
+    try {
+
+        const response = await fetch(
+            `https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${API_KEY}`
+        );
+
+        const data = await response.json();
+
+        const trailer = data.results.find(
+            video =>
+                video.site === "YouTube" &&
+                video.type === "Trailer"
+        );
+
+        if (trailer) {
+
+            window.open(
+                `https://www.youtube.com/watch?v=${trailer.key}`,
+                "_blank"
+            );
+
+        } else {
+
+            alert("Trailer not available");
+
+        }
+
+    } catch (error) {
+
+        console.error(error);
+        alert("Error loading trailer");
+
+    }
+}
+
+function pagination() {
+    return `
+    <div class="pagination">
+        <button onclick="getMovies(${currentPage - 1})" ${currentPage === 1 ? "disabled" : ""}>Prev</button>
+        <span>Page ${currentPage}</span>
+        <button onclick="getMovies(${currentPage + 1})">Next</button>
+    </div>
+    `;
+}
+
+</script>
+
+</body>
+</html>
